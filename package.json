@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "bootstrap-icons": "^1.13.1",
+    "react-hot-toast": "^2.6.0",
+    "react-modal": "^3.16.3",
+    "vue-toastification": "^2.0.0-rc.5"
+  }
+}

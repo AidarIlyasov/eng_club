@@ -1,0 +1,7 @@
+config.json
+vendor
+
+node_modules
+dist
+uploads
+.DS_Store
