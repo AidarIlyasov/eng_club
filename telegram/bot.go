@@ -1,10 +1,8 @@
 package telegram
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -16,7 +14,7 @@ import (
 
 // Bot handles Telegram bot commands and callbacks
 type Bot struct {
-	token   string
+	*TelegramClient
 	db      *database.MySQLDatabaseManager
 	baseURL string // Base URL for images (e.g., "http://localhost:8080")
 }
@@ -24,9 +22,9 @@ type Bot struct {
 // NewBot creates a new Telegram bot handler
 func NewBot(token string, db *database.MySQLDatabaseManager, baseURL string) *Bot {
 	return &Bot{
-		token:   token,
-		db:      db,
-		baseURL: baseURL,
+		TelegramClient: NewTelegramClient(token),
+		db:             db,
+		baseURL:        baseURL,
 	}
 }
 
@@ -74,84 +72,9 @@ type CallbackQuery struct {
 	Data    string           `json:"data"`
 }
 
-// InlineKeyboardMarkup represents an inline keyboard
-type InlineKeyboardMarkup struct {
-	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
-}
-
-// InlineKeyboardButton represents an inline keyboard button
-type InlineKeyboardButton struct {
-	Text         string `json:"text"`
-	CallbackData string `json:"callback_data,omitempty"`
-	URL          string `json:"url,omitempty"`
-}
-
-// SendPhotoWithKeyboard sends a photo with caption and inline keyboard
-func (b *Bot) SendPhotoWithKeyboard(chatID int64, photoURL string, caption string, keyboard *InlineKeyboardMarkup) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendPhoto", b.token)
-
-	payload := map[string]interface{}{
-		"chat_id":      chatID,
-		"photo":        photoURL,
-		"caption":      caption,
-		"parse_mode":   "Markdown",
-		"reply_markup": keyboard,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("telegram API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-// SendMessageWithKeyboard sends a message with inline keyboard
-func (b *Bot) SendMessageWithKeyboard(chatID int64, text string, keyboard *InlineKeyboardMarkup) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", b.token)
-
-	payload := map[string]interface{}{
-		"chat_id":      chatID,
-		"text":         text,
-		"parse_mode":   "Markdown",
-		"reply_markup": keyboard,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(url, "application/json", strings.NewReader(string(jsonData)))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body := make([]byte, 1024)
-		n, _ := resp.Body.Read(body)
-		return fmt.Errorf("telegram API returned status %d: %s", resp.StatusCode, string(body[:n]))
-	}
-
-	return nil
-}
-
 // AnswerCallbackQuery answers a callback query
 func (b *Bot) AnswerCallbackQuery(callbackQueryID, text string, showAlert bool) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", b.token)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", b.TelegramClient.token)
 
 	payload := map[string]interface{}{
 		"callback_query_id": callbackQueryID,
@@ -176,7 +99,7 @@ func (b *Bot) AnswerCallbackQuery(callbackQueryID, text string, showAlert bool) 
 
 // EditMessageText edits a message text
 func (b *Bot) EditMessageText(chatID int64, messageID int, text string, keyboard *InlineKeyboardMarkup) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", b.token)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", b.TelegramClient.token)
 
 	payload := map[string]interface{}{
 		"chat_id":      chatID,
@@ -229,71 +152,27 @@ func (b *Bot) HandleStart(chatID int64, userID int64, username string) error {
 	var buttons [][]InlineKeyboardButton
 
 	for i, event := range events {
-		// Check if user is already registered
-		isRegistered, err := b.db.IsUserRegisteredForEvent(event.ID, userID)
+		eventInfo, err := FormatEventInfo(b.db, &event, userID, i+1, username, "")
 		if err != nil {
-			log.Printf("Error checking registration: %v", err)
+			log.Printf("Error formatting event info: %v", err)
+			continue
 		}
 
-		// Get activity durations for this event
-		totalDuration, err := b.db.GetActivityDurations(event.ID)
-		if err != nil {
-			log.Printf("Error getting durations for event %d: %v", event.ID, err)
-		}
+		// Add to message text
+		messageText += eventInfo.FormattedText
 
-		// Format event info
-		scheduledTime := event.ScheduledAt.Format("Mon, Jan 02 at 15:04")
-		status := ""
-		if isRegistered {
-			status = " ✅ - Registered"
-		}
-
-		placeName := "Unknown"
-		metroArea := ""
-		mapURL := ""
-		if event.Place != nil {
-			placeName = event.Place.Name
-			if event.Place.MetroArea != "" {
-				metroArea = event.Place.MetroArea
-			}
-			if event.Place.MapURL != "" {
-				mapURL = event.Place.MapURL
-			}
-			// Collect image filename for collage
-			if event.Place.ImageURL != "" {
-				imageFilenames = append(imageFilenames, event.Place.ImageURL)
-			} else {
-				imageFilenames = append(imageFilenames, "")
-			}
+		// Collect image filename for collage
+		if eventInfo.ImageURL != "" {
+			imageFilenames = append(imageFilenames, eventInfo.ImageURL)
 		} else {
 			imageFilenames = append(imageFilenames, "")
-		}
-
-		// Add event details to message
-		messageText += fmt.Sprintf("*%d. %s*%s\n", i+1, event.Topic, status)
-		// Make place name a clickable link if map URL is available
-		if mapURL != "" {
-			messageText += fmt.Sprintf("📍 [%s](%s)", placeName, mapURL)
-		} else {
-			messageText += fmt.Sprintf("📍 %s", placeName)
-		}
-		if metroArea != "" {
-			messageText += fmt.Sprintf(" 🚇 %s", metroArea)
-		}
-		messageText += fmt.Sprintf("\n📅 %s", scheduledTime)
-		messageText += fmt.Sprintf(" 🕐 %d min\n\n", totalDuration)
-
-		// Create button for this event
-		buttonText := fmt.Sprintf("%d. %s", i+1, event.Topic)
-		if isRegistered {
-			buttonText = "✅ " + fmt.Sprintf("%d. %s", i+1, event.Topic)
 		}
 
 		// Add button to the keyboard (one button per row)
 		buttons = append(buttons, []InlineKeyboardButton{
 			{
-				Text:         buttonText,
-				CallbackData: fmt.Sprintf("event:%d:%s", event.ID, username),
+				Text:         eventInfo.ButtonText,
+				CallbackData: eventInfo.CallbackData,
 			},
 		})
 	}
@@ -345,7 +224,16 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 		return b.AnswerCallbackQuery(query.ID, "Invalid event ID", true)
 	}
 
-	username := parts[2]
+	var username string
+	if parts[2] == "notification" {
+		// Handle callback from notification - get username from query
+		username = query.From.Username
+		if username == "" {
+			username = query.From.FirstName
+		}
+	} else {
+		username = parts[2]
+	}
 	chatID := query.From.ID
 
 	// Check if user is registered
@@ -366,8 +254,13 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 			return b.AnswerCallbackQuery(query.ID, "Failed to cancel registration", true)
 		}
 
-		// Update the message
-		b.HandleStart(query.Message.Chat.ID, chatID, username)
+		// Send formatted event info showing updated status
+		event, _ := b.db.GetEvent(eventID)
+		if event != nil {
+			eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "✅ *Registration Cancelled*")
+			b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+		}
+
 		return b.AnswerCallbackQuery(query.ID, "Registration cancelled!", false)
 	}
 
@@ -385,14 +278,19 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 		return b.AnswerCallbackQuery(query.ID, "Failed to register", true)
 	}
 
-	// Update the message
-	b.HandleStart(query.Message.Chat.ID, chatID, username)
+	// Send formatted event info showing updated status
+	event, _ := b.db.GetEvent(eventID)
+	if event != nil {
+		eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "🎉 *Registration Successful*")
+		b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+	}
+
 	return b.AnswerCallbackQuery(query.ID, "Successfully registered!", false)
 }
 
 // GetUpdates gets updates from Telegram
 func (b *Bot) GetUpdates(offset int) ([]Update, error) {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=30", b.token, offset)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=30", b.TelegramClient.token, offset)
 
 	client := &http.Client{Timeout: 35 * time.Second}
 	resp, err := client.Get(url)

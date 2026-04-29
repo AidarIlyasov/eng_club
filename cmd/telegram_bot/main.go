@@ -39,7 +39,7 @@ func main() {
 	}
 
 	// Create and start bot
-	baseURL := fmt.Sprintf("http://%s:%d", cfg.Server.Host, cfg.Server.Port)
+	baseURL := fmt.Sprintf("https://%s:%d", cfg.Server.Host, cfg.Server.Port)
 	bot := telegram.NewBot(cfg.Telegram.BotToken, db, baseURL)
 	log.Println("Telegram bot started successfully!")
 	bot.Start() // This blocks

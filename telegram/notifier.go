@@ -7,14 +7,16 @@ import (
 	"net/http"
 	"time"
 
+	"eng_club/database"
 	"eng_club/models"
 )
 
 // Notifier handles Telegram bot communications
 type Notifier struct {
-	botToken string
-	chatID   string
-	client   *http.Client
+	*TelegramClient
+	chatID  string
+	baseURL string
+	db      *database.MySQLDatabaseManager
 }
 
 // Message represents a message to send via Telegram
@@ -25,19 +27,18 @@ type Message struct {
 }
 
 // NewNotifier creates a new Telegram notifier
-func NewNotifier(botToken, chatID string) *Notifier {
+func NewNotifier(botToken, chatID, baseURL string, db *database.MySQLDatabaseManager) *Notifier {
 	return &Notifier{
-		botToken: botToken,
-		chatID:   chatID,
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		TelegramClient: NewTelegramClient(botToken),
+		chatID:         chatID,
+		baseURL:        baseURL,
+		db:             db,
 	}
 }
 
 // SendMessage sends a message to a Telegram chat
 func (tn *Notifier) SendMessage(chatID *string, message string) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tn.botToken)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tn.TelegramClient.token)
 
 	msg := Message{
 		ChatID:    chatID,
@@ -50,7 +51,7 @@ func (tn *Notifier) SendMessage(chatID *string, message string) error {
 		return err
 	}
 
-	resp, err := tn.client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	resp, err := tn.TelegramClient.client.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
@@ -152,43 +153,46 @@ type ActivitySchedule struct {
 	Participants []models.Participant
 }
 
-// NotifyUpcomingEvent sends notifications for an upcoming event to the general chat
-func (tn *Notifier) NotifyUpcomingEvent(event models.Event, participants []models.Participant, totalDuration int) error {
-	scheduledTime := event.ScheduledAt.Format("Mon, Jan 02 at 15:04")
-
-	// Build general message text
-	messageText := fmt.Sprintf(`🎉 *Reminder: English Club Event Today!*
-
-*%s*
-
-📅 %s
-🕐 %d minutes`, event.Topic, scheduledTime, totalDuration)
-
-	// Add place information if available
-	if event.Place != nil {
-		if event.Place.MapURL != "" {
-			messageText += fmt.Sprintf("\n📍 [%s](%s)", event.Place.Name, event.Place.MapURL)
-		} else {
-			messageText += fmt.Sprintf("\n📍 %s", event.Place.Name)
-		}
-
-		if event.Place.MetroArea != "" {
-			messageText += fmt.Sprintf(" 🚇 %s", event.Place.MetroArea)
-		}
+// NotifyUpcomingEvent sends notifications for an upcoming event to the general chat with place image and registration button
+func (tn *Notifier) NotifyUpcomingEvent(event models.Event, totalDuration int) error {
+	// Use the shared FormatEventInfo function with custom title for notifications
+	customTitle := "🎉 *Reminder: English Club Event Today!*"
+	eventInfo, err := FormatEventInfo(tn.db, &event, int64(0), 0, "notification", customTitle) // userID=0 for notifications, index=0, username="notification"
+	if err != nil {
+		return fmt.Errorf("error formatting event info: %v", err)
 	}
 
-	// Add participant count
-	messageText += fmt.Sprintf("\n👥 %d participants registered", len(participants))
-	messageText += "\n\nGet ready for an amazing practice session! 🗣️✨"
+	// Add the call-to-action message
+	messageText := eventInfo.FormattedText + "Click the button below to register! 🗣️✨"
+
+	// Create registration button
+	keyboard := &InlineKeyboardMarkup{
+		InlineKeyboard: [][]InlineKeyboardButton{
+			{
+				{
+					Text:         "📝 Register for Event",
+					CallbackData: fmt.Sprintf("event:%d:notification", event.ID),
+				},
+			},
+		},
+	}
 
 	// Send to notify_chat_id from config
-	if tn.chatID != "" {
-		if err := tn.SendMessage(&tn.chatID, messageText); err != nil {
-			return fmt.Errorf("failed to send to notify chat: %v", err)
-		}
-	} else {
+	if tn.chatID == "" {
 		return fmt.Errorf("notify_chat_id is not configured")
 	}
 
-	return nil
+	// Try to send with place image if available
+	if eventInfo.ImageURL != "" {
+		fullImageURL := fmt.Sprintf("%s/uploads/%s", tn.baseURL, eventInfo.ImageURL)
+		err := tn.TelegramClient.SendPhotoWithKeyboard(tn.chatID, fullImageURL, messageText, keyboard)
+		if err != nil {
+			// Fallback to text message if photo fails
+			return tn.TelegramClient.SendMessageWithKeyboard(tn.chatID, messageText, keyboard)
+		}
+		return nil
+	} else {
+		// Send text message with keyboard if no image
+		return tn.TelegramClient.SendMessageWithKeyboard(tn.chatID, messageText, keyboard)
+	}
 }

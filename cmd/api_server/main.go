@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"time"
@@ -35,7 +36,8 @@ func main() {
 		log.Fatal("database: ", err)
 	}
 
-	telegramBot := telegram.NewNotifier(cfg.Telegram.BotToken, cfg.Telegram.NotifyChatID)
+	baseURL := fmt.Sprintf("https://%s:%d", cfg.Server.Host, cfg.Server.Port)
+	telegramBot := telegram.NewNotifier(cfg.Telegram.BotToken, cfg.Telegram.NotifyChatID, baseURL, db)
 
 	// Create notification service and start scheduler
 	notificationService := services.NewNotificationService(db, telegramBot)

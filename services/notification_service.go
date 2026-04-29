@@ -33,14 +33,6 @@ func (ns *NotificationService) CheckAndSendEventNotifications() error {
 	fmt.Printf("events: %d\n", len(events))
 
 	for _, event := range events {
-		// Get participants for this event
-		participants, err := ns.db.GetParticipants(event.ID)
-		if err != nil {
-			log.Printf("Failed to get participants for event %d: %v", event.ID, err)
-			continue
-		}
-		fmt.Printf("participants: %d\n", len(participants))
-
 		// Get total duration for the event
 		totalDuration := 60 // Default duration in minutes
 		if duration, err := ns.db.GetActivityDurations(event.ID); err == nil {
@@ -50,7 +42,7 @@ func (ns *NotificationService) CheckAndSendEventNotifications() error {
 		fmt.Printf("duration: %d\n", totalDuration)
 
 		// Send notifications
-		if err := ns.notifier.NotifyUpcomingEvent(event, participants, totalDuration); err != nil {
+		if err := ns.notifier.NotifyUpcomingEvent(event, totalDuration); err != nil {
 			log.Printf("Failed to send notification for event %d: %v", event.ID, err)
 			continue
 		}
