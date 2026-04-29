@@ -31,6 +31,8 @@ type TelegramConfig struct {
 	BotToken     string `json:"bot_token"`
 	NotifyChatID string `json:"notify_chat_id"`
 	Enabled      bool   `json:"enabled"`
+	WebhookURL   string `json:"webhook_url"`
+	WebhookPort  int    `json:"webhook_port"`
 }
 
 // ServerConfig holds server configuration

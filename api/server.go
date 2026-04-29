@@ -73,6 +73,9 @@ func (s *Server) routes() {
 	s.router.POST("/api/images/upload", h.UploadImage)
 	s.router.GET("/api/uploads/{filename}", h.ServeImage)
 	s.router.GET("/api/uploads/collages/{filename}", h.ServeCollage)
+
+	// Serve frontend static files (catch-all route, must be last)
+	s.router.GET("/{filepath:*}", h.ServeFrontend)
 }
 
 // ListenAndServe serves on host:port from cfg.Server.

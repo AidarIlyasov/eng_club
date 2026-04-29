@@ -1,8 +1,10 @@
 package telegram
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -311,9 +313,104 @@ func (b *Bot) GetUpdates(offset int) ([]Update, error) {
 	return result.Result, nil
 }
 
-// Start starts the bot polling loop
+// ProcessUpdate processes a single Telegram update
+func (b *Bot) ProcessUpdate(update Update) {
+	// Handle commands
+	if update.Message != nil && update.Message.Text != "" {
+		if strings.HasPrefix(update.Message.Text, "/start") {
+			username := update.Message.From.Username
+			if username == "" {
+				username = update.Message.From.FirstName
+			}
+			err := b.HandleStart(update.Message.Chat.ID, update.Message.From.ID, username)
+			if err != nil {
+				log.Printf("Error handling /start: %v", err)
+			}
+		}
+	}
+
+	// Handle callback queries
+	if update.CallbackQuery != nil {
+		err := b.HandleCallback(update.CallbackQuery)
+		if err != nil {
+			log.Printf("Error handling callback: %v", err)
+		}
+	}
+}
+
+// HandleWebhook handles incoming webhook requests from Telegram
+func (b *Bot) HandleWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var update Update
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		log.Printf("Error decoding webhook update: %v", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Process the update
+	b.ProcessUpdate(update)
+
+	// Send OK response to Telegram
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
+// SetWebhook sets the webhook URL with Telegram
+func (b *Bot) SetWebhook(webhookURL string) error {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook", b.TelegramClient.token)
+	
+	payload := map[string]interface{}{
+		"url": webhookURL,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	resp, err := b.TelegramClient.client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	log.Printf("Webhook set successfully to: %s", webhookURL)
+	return nil
+}
+
+// StartWebhookServer starts the webhook HTTP server
+func (b *Bot) StartWebhookServer(port int, webhookURL string) error {
+	// Set webhook with Telegram
+	if err := b.SetWebhook(webhookURL); err != nil {
+		return fmt.Errorf("failed to set webhook: %v", err)
+	}
+
+	// Create HTTP server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/webhook", b.HandleWebhook)
+
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
+	}
+
+	log.Printf("Starting Telegram webhook server on port %d", port)
+	return server.ListenAndServe()
+}
+
+// Start starts the bot polling loop (legacy mode)
 func (b *Bot) Start() {
-	log.Println("Starting Telegram bot...")
+	log.Println("Starting Telegram bot in polling mode...")
 	offset := 0
 
 	for {
@@ -326,28 +423,7 @@ func (b *Bot) Start() {
 
 		for _, update := range updates {
 			offset = update.UpdateID + 1
-
-			// Handle commands
-			if update.Message != nil && update.Message.Text != "" {
-				if strings.HasPrefix(update.Message.Text, "/start") {
-					username := update.Message.From.Username
-					if username == "" {
-						username = update.Message.From.FirstName
-					}
-					err := b.HandleStart(update.Message.Chat.ID, update.Message.From.ID, username)
-					if err != nil {
-						log.Printf("Error handling /start: %v", err)
-					}
-				}
-			}
-
-			// Handle callback queries
-			if update.CallbackQuery != nil {
-				err := b.HandleCallback(update.CallbackQuery)
-				if err != nil {
-					log.Printf("Error handling callback: %v", err)
-				}
-			}
+			b.ProcessUpdate(update)
 		}
 	}
 }

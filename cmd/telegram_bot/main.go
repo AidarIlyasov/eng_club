@@ -38,9 +38,20 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Create and start bot
+	// Create bot
 	baseURL := fmt.Sprintf("https://%s:%d", cfg.Server.Host, cfg.Server.Port)
 	bot := telegram.NewBot(cfg.Telegram.BotToken, db, baseURL)
-	log.Println("Telegram bot started successfully!")
-	bot.Start() // This blocks
+
+	// Start bot based on configuration
+	if cfg.Telegram.WebhookURL != "" && cfg.Telegram.WebhookPort > 0 {
+		// Use webhook mode
+		log.Printf("Starting Telegram bot in webhook mode on port %d", cfg.Telegram.WebhookPort)
+		if err := bot.StartWebhookServer(cfg.Telegram.WebhookPort, cfg.Telegram.WebhookURL); err != nil {
+			log.Fatalf("Failed to start webhook server: %v", err)
+		}
+	} else {
+		// Fall back to polling mode
+		log.Println("Telegram bot started in polling mode!")
+		bot.Start() // This blocks
+	}
 }
