@@ -187,16 +187,15 @@ func (b *Bot) HandleStart(chatID int64, userID int64, username string) error {
 	}
 
 	// Create collage from place images
-	// collageFilename, err := services.CreateCollage(imageFilenames)
-	// if err != nil {
-	// 	log.Printf("Failed to create collage: %v", err)
-	// 	// Fallback to text-only message if collage creation fails
-	// 	return b.SendMessageWithKeyboard(chatID, messageText, keyboard)
-	// }
+	collageFilename, err := CreateCollage(imageFilenames)
+	if err != nil {
+		log.Printf("Failed to create collage: %v", err)
+		// Fallback to text-only message if collage creation fails
+		return b.SendMessageWithKeyboard(chatID, messageText, keyboard)
+	}
 
 	// Send collage photo with message and buttons
-	// collageURL := fmt.Sprintf("%s/uploads/collages/%s", b.baseURL, collageFilename)
-	collageURL := "https://downloader.disk.yandex.ru/disk/b1292f7c03ab5fd8f559dc6b983c0fc380d37ff761e6ba8c5784bcb8d3da7a1d/69dd233a/8DOb7t76FtyaXH4kSFcDfPR3-ofg4a25I14M6phR-viRWqN1WcShRJxTbvotYrnlpIztyYy6ZSmfX2mjH-ehig%3D%3D?uid=0&filename=collage_787af0c8ee4ddd4139517be52033e980.jpg&disposition=attachment&hash=vYOi7J9RRc5S/f/Ze2MiJeZHOd0QqcsBaOQkqnrfF2DJcy%2Bzp2ye6CgiQzfXeyzoq/J6bpmRyOJonT3VoXnDag%3D%3D%3A&limit=0&content_type=image%2Fjpeg&owner_uid=689715285&fsize=56282&hid=c2d976ece0cf58659a597ec7ede7615b&media_type=image&tknv=v3"
+	collageURL := fmt.Sprintf("%s/uploads/collages/%s", b.baseURL, collageFilename)
 
 	// Only send photo if it's an HTTPS URL (Telegram requirement)
 	if strings.HasPrefix(collageURL, "https://") {
@@ -256,11 +255,20 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 			return b.AnswerCallbackQuery(query.ID, "Failed to cancel registration", true)
 		}
 
-		// Send formatted event info showing updated status
+		// Send formatted event info showing updated status with photo
 		event, _ := b.db.GetEvent(eventID)
 		if event != nil {
 			eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "✅ *Registration Cancelled*")
-			b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+			if eventInfo.ImageURL != "" {
+				fullImageURL := fmt.Sprintf("%s/uploads/%s", b.baseURL, eventInfo.ImageURL)
+				err := b.TelegramClient.SendPhotoWithKeyboard(chatID, fullImageURL, eventInfo.FormattedText, nil)
+				if err != nil {
+					// Fallback to text message if photo fails
+					b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+				}
+			} else {
+				b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+			}
 		}
 
 		return b.AnswerCallbackQuery(query.ID, "Registration cancelled!", false)
@@ -280,11 +288,20 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 		return b.AnswerCallbackQuery(query.ID, "Failed to register", true)
 	}
 
-	// Send formatted event info showing updated status
+	// Send formatted event info showing updated status with photo
 	event, _ := b.db.GetEvent(eventID)
 	if event != nil {
 		eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "🎉 *Registration Successful*")
-		b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+		if eventInfo.ImageURL != "" {
+			fullImageURL := fmt.Sprintf("%s/uploads/%s", b.baseURL, eventInfo.ImageURL)
+			err := b.TelegramClient.SendPhotoWithKeyboard(chatID, fullImageURL, eventInfo.FormattedText, nil)
+			if err != nil {
+				// Fallback to text message if photo fails
+				b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+			}
+		} else {
+			b.TelegramClient.SendMessageWithKeyboard(chatID, eventInfo.FormattedText, nil)
+		}
 	}
 
 	return b.AnswerCallbackQuery(query.ID, "Successfully registered!", false)
@@ -363,7 +380,7 @@ func (b *Bot) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 // SetWebhook sets the webhook URL with Telegram
 func (b *Bot) SetWebhook(webhookURL string) error {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook", b.TelegramClient.token)
-	
+
 	payload := map[string]interface{}{
 		"url": webhookURL,
 	}

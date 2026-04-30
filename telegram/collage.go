@@ -1,4 +1,4 @@
-package services
+package telegram
 
 import (
 	"crypto/md5"

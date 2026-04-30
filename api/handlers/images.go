@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"eng_club/services"
+	"eng_club/telegram"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 )
@@ -282,5 +282,5 @@ func resizeImage(img image.Image, targetWidth, targetHeight int) image.Image {
 // CreateCollage creates a collage from multiple image filenames
 // Returns the collage filename or error. Uses checksum to avoid recreating existing collages.
 func (d *Deps) CreateCollage(imageFilenames []string) (string, error) {
-	return services.CreateCollage(imageFilenames)
+	return telegram.CreateCollage(imageFilenames)
 }
