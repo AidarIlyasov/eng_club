@@ -33,6 +33,7 @@ type TelegramConfig struct {
 	Enabled      bool   `json:"enabled"`
 	WebhookURL   string `json:"webhook_url"`
 	WebhookPort  int    `json:"webhook_port"`
+	DomainURL    string `json:"domain_url"`
 }
 
 // ServerConfig holds server configuration

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -38,9 +37,11 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Create bot
-	baseURL := fmt.Sprintf("https://%s:%d", cfg.Server.Host, cfg.Server.Port)
-	bot := telegram.NewBot(cfg.Telegram.BotToken, db, baseURL)
+	// Create bot - use domain URL from config
+	if cfg.Telegram.DomainURL == "" {
+		log.Fatal("domain_url is required in telegram config for image serving")
+	}
+	bot := telegram.NewBot(cfg.Telegram.BotToken, db, cfg.Telegram.DomainURL)
 
 	// Start bot based on configuration
 	if cfg.Telegram.WebhookURL != "" && cfg.Telegram.WebhookPort > 0 {

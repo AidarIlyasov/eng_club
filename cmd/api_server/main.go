@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"math/rand"
 	"time"
@@ -36,8 +35,10 @@ func main() {
 		log.Fatal("database: ", err)
 	}
 
-	baseURL := fmt.Sprintf("https://%s:%d", cfg.Server.Host, cfg.Server.Port)
-	telegramBot := telegram.NewNotifier(cfg.Telegram.BotToken, cfg.Telegram.NotifyChatID, baseURL, db)
+	if cfg.Telegram.DomainURL == "" {
+		log.Fatal("domain_url is required in telegram config for image serving")
+	}
+	telegramBot := telegram.NewNotifier(cfg.Telegram.BotToken, cfg.Telegram.NotifyChatID, cfg.Telegram.DomainURL, db)
 
 	// Create notification service and start scheduler
 	notificationService := services.NewNotificationService(db, telegramBot)
