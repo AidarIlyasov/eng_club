@@ -543,16 +543,24 @@ func (dm *MySQLDatabaseManager) GetEvent(id int64) (*models.Event, error) {
 	var notifyAt sql.NullTime
 	var startedAt sql.NullTime
 	var finishedAt sql.NullTime
+	var placeName, placeMetroArea, placeMapURL, placeImageURL sql.NullString
+	
 	err := dm.db.QueryRow(`
-		SELECT id, place_id, scheduled_at, topic, notify_at, status, type, started_at, created_at, finished_at
-		FROM events WHERE id = ?`, id).Scan(
-		&e.ID, &e.PlaceID, &e.ScheduledAt, &e.Topic, &notifyAt, &e.Status, &e.Type, &startedAt, &e.CreatedAt, &finishedAt)
+		SELECT e.id, e.place_id, e.scheduled_at, e.topic, e.notify_at, e.status, e.type, e.started_at, e.created_at, e.finished_at,
+		       p.name, p.metro_area, p.map_url, p.image_url
+		FROM events e
+		LEFT JOIN places p ON e.place_id = p.id 
+		WHERE e.id = ?`, id).Scan(
+		&e.ID, &e.PlaceID, &e.ScheduledAt, &e.Topic, &notifyAt, &e.Status, &e.Type, &startedAt, &e.CreatedAt, &finishedAt,
+		&placeName, &placeMetroArea, &placeMapURL, &placeImageURL)
+		
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	
 	if notifyAt.Valid {
 		e.NotifyAt = &notifyAt.Time
 	}
@@ -562,6 +570,18 @@ func (dm *MySQLDatabaseManager) GetEvent(id int64) (*models.Event, error) {
 	if finishedAt.Valid {
 		e.FinishedAt = &finishedAt.Time
 	}
+	
+	// Populate place information if available
+	if placeName.Valid {
+		e.Place = &models.Place{
+			ID:        e.PlaceID,
+			Name:      placeName.String,
+			MetroArea: placeMetroArea.String,
+			MapURL:    placeMapURL.String,
+			ImageURL:  placeImageURL.String,
+		}
+	}
+	
 	return &e, nil
 }
 
