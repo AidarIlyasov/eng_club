@@ -12,17 +12,18 @@ import (
 	"strings"
 
 	"eng_club/telegram"
+
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 )
 
 const (
-	maxUploadSize   = 10 << 20 // 10 MB
-	maxDimension    = 1200     // Maximum width or height
-	targetWidth     = 386
-	targetHeight    = 300
-	uploadDir       = "./uploads"
-	collageDir      = "./uploads/collages"
+	maxUploadSize = 10 << 20 // 10 MB
+	maxDimension  = 1200     // Maximum width or height
+	targetWidth   = 386
+	targetHeight  = 300
+	uploadDir     = "./uploads"
+	collageDir    = "./uploads/collages"
 )
 
 // UploadImage handles POST /api/upload-image

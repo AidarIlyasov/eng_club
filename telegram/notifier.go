@@ -184,7 +184,7 @@ func (tn *Notifier) NotifyUpcomingEvent(event models.Event, totalDuration int) e
 
 	// Try to send with place image if available
 	if eventInfo.ImageURL != "" {
-		fullImageURL := fmt.Sprintf("%s/uploads/%s", tn.baseURL, eventInfo.ImageURL)
+		fullImageURL := fmt.Sprintf("%s/api/uploads/%s", tn.baseURL, eventInfo.ImageURL)
 		err := tn.TelegramClient.SendPhotoWithKeyboard(tn.chatID, fullImageURL, messageText, keyboard)
 		if err != nil {
 			// Fallback to text message if photo fails

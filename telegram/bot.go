@@ -195,7 +195,7 @@ func (b *Bot) HandleStart(chatID int64, userID int64, username string) error {
 	}
 
 	// Send collage photo with message and buttons
-	collageURL := fmt.Sprintf("%s/uploads/collages/%s", b.baseURL, collageFilename)
+	collageURL := fmt.Sprintf("%s/api/uploads/collages/%s", b.baseURL, collageFilename)
 
 	// Only send photo if it's an HTTPS URL (Telegram requirement)
 	if strings.HasPrefix(collageURL, "https://") {
@@ -260,7 +260,7 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 		if event != nil {
 			eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "✅ *Registration Cancelled*")
 			if eventInfo.ImageURL != "" {
-				fullImageURL := fmt.Sprintf("%s/uploads/%s", b.baseURL, eventInfo.ImageURL)
+				fullImageURL := fmt.Sprintf("%s/api/uploads/%s", b.baseURL, eventInfo.ImageURL)
 				err := b.TelegramClient.SendPhotoWithKeyboard(chatID, fullImageURL, eventInfo.FormattedText, nil)
 				if err != nil {
 					// Fallback to text message if photo fails
@@ -293,7 +293,7 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 	if event != nil {
 		eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "🎉 *Registration Successful*")
 		if eventInfo.ImageURL != "" {
-			fullImageURL := fmt.Sprintf("%s/uploads/%s", b.baseURL, eventInfo.ImageURL)
+			fullImageURL := fmt.Sprintf("%s/api/uploads/%s", b.baseURL, eventInfo.ImageURL)
 			err := b.TelegramClient.SendPhotoWithKeyboard(chatID, fullImageURL, eventInfo.FormattedText, nil)
 			if err != nil {
 				// Fallback to text message if photo fails
@@ -417,7 +417,7 @@ func (b *Bot) StartWebhookServer(port int, webhookURL string) error {
 	mux.HandleFunc("/webhook", b.HandleWebhook)
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    fmt.Sprintf("127.0.0.1:%d", port),
 		Handler: mux,
 	}
 
