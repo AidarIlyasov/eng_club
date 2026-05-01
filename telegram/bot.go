@@ -197,6 +197,7 @@ func (b *Bot) HandleStart(chatID int64, userID int64, username string) error {
 
 	// Send collage photo with message and buttons
 	collageURL := fmt.Sprintf("%s/api/uploads/collages/%s", b.baseURL, collageFilename)
+	log.Printf("Sending collage photo URL: %s", collageURL)
 
 	// Only send photo if it's an HTTPS URL (Telegram requirement)
 	if strings.HasPrefix(collageURL, "https://") {
@@ -262,6 +263,7 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 			eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "✅ *Registration Cancelled*")
 			if eventInfo.ImageURL != "" {
 				fullImageURL := fmt.Sprintf("%s/api/uploads/%s", b.baseURL, eventInfo.ImageURL)
+				log.Printf("Sending cancel confirmation photo URL: %s", fullImageURL)
 				err := b.TelegramClient.SendPhotoWithKeyboard(chatID, fullImageURL, eventInfo.FormattedText, nil)
 				if err != nil {
 					// Fallback to text message if photo fails
@@ -295,6 +297,7 @@ func (b *Bot) HandleCallback(query *CallbackQuery) error {
 		eventInfo, _ := FormatEventInfo(b.db, event, chatID, 0, username, "🎉 *Registration Successful*")
 		if eventInfo.ImageURL != "" {
 			fullImageURL := fmt.Sprintf("%s/api/uploads/%s", b.baseURL, eventInfo.ImageURL)
+			log.Printf("Sending register confirmation photo URL: %s", fullImageURL)
 			err := b.TelegramClient.SendPhotoWithKeyboard(chatID, fullImageURL, eventInfo.FormattedText, nil)
 			if err != nil {
 				// Fallback to text message if photo fails
