@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -407,12 +408,6 @@ func (b *Bot) SetWebhook(webhookURL string) error {
 
 // StartWebhookServer starts the webhook HTTP server
 func (b *Bot) StartWebhookServer(port int, webhookURL string) error {
-	// Set webhook with Telegram
-	if err := b.SetWebhook(webhookURL); err != nil {
-		return fmt.Errorf("failed to set webhook: %v", err)
-	}
-
-	// Create HTTP server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook", b.HandleWebhook)
 
@@ -421,8 +416,19 @@ func (b *Bot) StartWebhookServer(port int, webhookURL string) error {
 		Handler: mux,
 	}
 
+	// Start listening before registering the webhook so Telegram can reach us immediately
+	ln, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to bind port %d: %v", port, err)
+	}
+
+	if err := b.SetWebhook(webhookURL); err != nil {
+		ln.Close()
+		return fmt.Errorf("failed to set webhook: %v", err)
+	}
+
 	log.Printf("Starting Telegram webhook server on port %d", port)
-	return server.ListenAndServe()
+	return server.Serve(ln)
 }
 
 // Start starts the bot polling loop (legacy mode)
