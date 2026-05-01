@@ -25,6 +25,8 @@ const (
 // CreateCollage creates a collage from multiple image filenames
 // Returns the collage filename or error. Uses checksum to avoid recreating existing collages.
 func CreateCollage(imageFilenames []string) (string, error) {
+	fmt.Printf("DEBUG: Creating collage with filenames: %v\n", imageFilenames)
+	
 	// Ensure collage directory exists
 	if err := os.MkdirAll(collageDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create collage directory: %v", err)
@@ -38,24 +40,32 @@ func CreateCollage(imageFilenames []string) (string, error) {
 	checksum := fmt.Sprintf("%x", hash.Sum(nil))
 	collageFilename := fmt.Sprintf("collage_%s.jpg", checksum)
 	collagePath := filepath.Join(collageDir, collageFilename)
+	
+	fmt.Printf("DEBUG: Collage filename will be: %s\n", collageFilename)
 
 	// Check if collage already exists
 	if _, err := os.Stat(collagePath); err == nil {
+		fmt.Printf("DEBUG: Using existing collage: %s\n", collageFilename)
 		return collageFilename, nil
 	}
 
 	// Load images
 	images := make([]image.Image, 0, len(imageFilenames))
-	for _, filename := range imageFilenames {
+	for i, filename := range imageFilenames {
 		if filename == "" {
+			fmt.Printf("DEBUG: Skipping empty filename at index %d\n", i)
 			continue // Skip empty filenames
 		}
 		
 		imagePath := filepath.Join(uploadDir, filename)
+		fmt.Printf("DEBUG: Loading image from: %s\n", imagePath)
 		img, err := loadImage(imagePath)
 		if err != nil {
+			fmt.Printf("DEBUG: Failed to load image %s: %v - using placeholder\n", filename, err)
 			// If image doesn't exist, create a placeholder
 			img = createPlaceholder()
+		} else {
+			fmt.Printf("DEBUG: Successfully loaded image: %s\n", filename)
 		}
 		images = append(images, img)
 	}
@@ -80,6 +90,7 @@ func CreateCollage(imageFilenames []string) (string, error) {
 		return "", fmt.Errorf("failed to encode collage: %v", err)
 	}
 
+	fmt.Printf("DEBUG: Successfully created new collage: %s\n", collageFilename)
 	return collageFilename, nil
 }
 
